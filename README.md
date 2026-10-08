@@ -1,5 +1,7 @@
 # 🛰️ NBody Labs X Range Submissions
 
+> *Serving the curiosity of people who build, break, and defend modern systems.*
+
 Welcome to the automated triage and peer-review portal for the **NBody Labs Security Range**.
 
 Here, security learners and researchers submit their Bug Bounty Reports as Pull Requests. Our automated **AI Triage Bot** reviews each submission against our **25-point industry triage rubric**, scores your report, and posts detailed feedback directly on your PR.
