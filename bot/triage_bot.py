@@ -23,8 +23,8 @@ def load_rubric(path: Path = RUBRIC_PATH) -> Dict[str, Any]:
 
 def build_system_prompt(rubric: Dict[str, Any]) -> str:
     prompt = (
-        "You are the Lead Security Triager and AI Red Team Evaluator at NBody Labs X Range.\n"
-        "Your task is to objectively evaluate a submitted Bug Bounty / Red Team report written by a security researcher.\n\n"
+        "You are the Lead Security Triager and Evaluator at NBody Labs X Range.\n"
+        "Your task is to objectively evaluate a submitted Bug Bounty / Security Research report written by a researcher.\n\n"
         "You evaluate reports against a strict 25-point rubric spanning 5 distinct dimensions (0 to 5 points each).\n\n"
         "### EVALUATION CRITERIA:\n"
     )

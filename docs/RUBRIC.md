@@ -1,6 +1,6 @@
 # Bug Bounty Evaluation Rubric (25-Point Standard)
 
-This rubric is used by triagers and the automated GitHub Reviewer Bot to evaluate LLM red teaming and vulnerability reports submitted to NBody Labs X Range.
+This rubric is used by triagers and the automated GitHub Reviewer Bot to evaluate LLM security and vulnerability reports submitted to NBody Labs X Range.
 
 LLM security triage differs fundamentally from traditional web application security:
 * **LLMs are probabilistic**: Findings cannot be judged on "100% determinism". Instead, top-tier reports document empirical success rates across multiple trials under specified parameters.
