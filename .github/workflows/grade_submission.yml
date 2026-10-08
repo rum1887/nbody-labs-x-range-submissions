@@ -55,11 +55,11 @@ jobs:
           CHANGED_FILES=$(gh pr view "$PR_NUMBER" --repo "$REPO_NAME" --json files --jq '.files[].path')
 
           # 2. Filter for report markdown files in submissions/challenge-*/
-          REPORT_FILES=$(echo "$CHANGED_FILES" | grep -E '^submissions/challenge-[0-9]{2}/[^\/]+\.md$' || true)
+          REPORT_FILES=$(echo "$CHANGED_FILES" | grep -E '^submissions/challenge-(0x)?[0-9a-fA-F]{2}/[^\/]+\.md$' || true)
           REPORT_COUNT=$(echo "$REPORT_FILES" | grep -v '^$' | wc -l | tr -d ' ')
 
           if [ "$REPORT_COUNT" -eq 0 ]; then
-            echo "[!] Error: No valid report markdown file found in submissions/challenge-XX/<handle>-report.md"
+            echo "[!] Error: No valid report markdown file found in submissions/challenge-0xXX/<handle>-report.md"
             exit 1
           fi
 

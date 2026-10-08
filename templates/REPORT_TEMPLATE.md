@@ -2,7 +2,7 @@
 
 **Researcher Handle:** @your-github-username  
 **Target Asset:** NBody Cloud Console (Orbit Co-pilot)  
-**Challenge ID:** Challenge 01  
+**Challenge ID:** Challenge 0x01  
 **Date:** YYYY-MM-DD  
 
 ---
@@ -21,7 +21,7 @@ Provide a concise 2–3 sentence executive summary explaining what the vulnerabi
 ## 2. Target Environment & Test Parameters
 * **Model Configuration Tested:** (e.g. `qwen3:4b`, `gpt-4o-mini`, `llama-3.3-70b`)
 * **Endpoint / Hosting:** (e.g. local Docker Ollama, Groq API, OpenAI API)
-* **Starting State:** (e.g. default seeded database on fresh `./range up 01`)
+* **Starting State:** (e.g. default seeded database on fresh `./range up 0x01`)
 * **Empirical Reliability:** (e.g. "Reproduced successfully in 8 out of 10 independent trials (80% success rate)")
 
 ---

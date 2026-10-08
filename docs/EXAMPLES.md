@@ -1,6 +1,6 @@
 # Reference Bug Bounty Reports: Strong vs. Weak
 
-> **Important Note**: To preserve the discovery experience of the NBody Labs X Range challenges, the worked examples below evaluate an alternate illustrative target: **ApexDesk IT Copilot v2.4** (a simulated enterprise IT support agent with internal ticketing and user lookup tools).
+> **Important Note**: To preserve the discovery experience of the NBody Labs 0xRange challenges, the worked examples below evaluate an alternate illustrative target: **ApexDesk IT Copilot v2.4** (a simulated enterprise IT support agent with internal ticketing and user lookup tools).
 >
 > Study the structural differences between the **Grade A** and **Grade D** reports to understand what security triagers and the automated review bot look for.
 

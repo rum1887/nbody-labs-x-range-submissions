@@ -1,6 +1,6 @@
 # NBody Labs Bug Bounty Evaluation Rubric (25-Point Standard)
 
-This rubric is used by triagers and the automated GitHub Reviewer Bot to evaluate security and vulnerability reports submitted to NBody Labs X Range.
+This rubric is used by triagers and the automated GitHub Reviewer Bot to evaluate security and vulnerability reports submitted to NBody Labs 0xRange.
 
 Security triage for autonomous agent systems differs fundamentally from traditional web application security:
 * **LLMs are probabilistic**: Findings cannot be judged on "100% determinism". Top-tier reports document empirical success rates across multiple trials under specified parameters.

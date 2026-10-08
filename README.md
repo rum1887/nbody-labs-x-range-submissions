@@ -1,4 +1,4 @@
-# 🛰️ NBody Labs X Range Submissions
+# 🛰️ NBody Labs: 0xRange Submissions
 
 > **The proving ground for modern security research.**  
 > *Real architectures. Modern attack surfaces. Zero artificial flags.*
@@ -22,7 +22,7 @@ Here, security learners and researchers submit their Bug Bounty Reports as Pull 
 ### Step 2: Draft Your Report
 1. Copy the standard template:
    ```bash
-   cp templates/REPORT_TEMPLATE.md submissions/challenge-01/<your-handle>-report.md
+   cp templates/REPORT_TEMPLATE.md submissions/challenge-0x01/<your-handle>-report.md
    ```
 2. Fill out the report thoroughly with your findings from the target lab ([`nbodylabs-0xrange`](https://github.com/rum1887/nbodylabs-0xrange)).
 3. Make sure you document:
@@ -32,16 +32,16 @@ Here, security learners and researchers submit their Bug Bounty Reports as Pull 
    * Forensic logs or audit artifacts
 
 > **Submission Constraints:**
-> * Each PR must add or modify **exactly one** report file (`submissions/challenge-XX/<your-handle>-report.md`).
+> * Each PR must add or modify **exactly one** report file (`submissions/challenge-0xXX/<your-handle>-report.md`).
 > * Maximum report file size is 64 KB. Symlinks are rejected.
 
 ### Step 3: Open a Pull Request
 1. Commit and push your report to your fork:
    ```bash
-   git checkout -b submission-challenge-01
-   git add submissions/challenge-01/<your-handle>-report.md
-   git commit -m "Submit Challenge 01 report by <your-handle>"
-   git push origin submission-challenge-01
+   git checkout -b submission-challenge-0x01
+   git add submissions/challenge-0x01/<your-handle>-report.md
+   git commit -m "Submit Challenge 0x01 report by <your-handle>"
+   git push origin submission-challenge-0x01
    ```
 2. Open a Pull Request against `main` of this repository.
 
