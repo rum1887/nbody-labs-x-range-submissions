@@ -8,6 +8,7 @@ Protected against prompt injection manipulation via random delimiters and determ
 
 import argparse
 import json
+import math
 import os
 import re
 import secrets
@@ -18,6 +19,23 @@ import urllib.request
 import urllib.error
 
 RUBRIC_PATH = Path(__file__).parent / "rubric.json"
+TEMPLATE_PATH = Path(__file__).resolve().parent.parent / "templates" / "REPORT_TEMPLATE.md"
+
+
+def get_template_boilerplate() -> List[str]:
+    boilerplate = []
+    if TEMPLATE_PATH.exists():
+        try:
+            with open(TEMPLATE_PATH, "r", encoding="utf-8") as f:
+                for line in f:
+                    stripped = line.strip()
+                    cleaned = re.sub(r'[*_`#>\-\[\]\(\)\|:]', ' ', stripped)
+                    cleaned = re.sub(r'\s+', ' ', cleaned).strip().lower()
+                    if len(cleaned) >= 12:
+                        boilerplate.append(cleaned)
+        except Exception:
+            pass
+    return boilerplate
 
 
 def load_rubric(path: Path = RUBRIC_PATH) -> Dict[str, Any]:
@@ -95,6 +113,85 @@ def build_system_prompt(rubric: Dict[str, Any], delimiter: str) -> str:
     return prompt
 
 
+CANONICAL_DIMENSIONS = [
+    "technical_precision",
+    "empirical_reproducibility",
+    "blast_radius",
+    "attack_chain",
+    "remediation",
+]
+
+WORD_TO_NUM = {
+    "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5
+}
+
+
+def parse_score(val: Any) -> int:
+    """Robustly parses scores across ints, floats, strings ('4.5', '4/5', 'five'). Floors fractional scores."""
+    if val is None:
+        return 0
+    if isinstance(val, (int, float)):
+        if math.isnan(val) or math.isinf(val):
+            return 0
+        return max(0, min(5, int(float(val))))
+    if isinstance(val, str):
+        v = val.strip().lower()
+        if v in ("nan", "inf", "-inf", "infinity", "-infinity"):
+            return 0
+        if v in WORD_TO_NUM:
+            return WORD_TO_NUM[v]
+        if "/" in v:
+            v = v.split("/")[0].strip()
+        try:
+            num = float(v)
+            if math.isnan(num) or math.isinf(num):
+                return 0
+            return max(0, min(5, int(num)))
+        except (ValueError, TypeError):
+            return 0
+    return 0
+
+
+def verify_quoted_evidence(evidence: str, report_content: str, boilerplate: Optional[List[str]] = None) -> bool:
+    """Verifies that the quoted evidence string actually exists within the submitted report and is not template boilerplate."""
+    if not evidence or not isinstance(evidence, str):
+        return False
+    clean = evidence.strip()
+    # Strip optional surrounding quotation marks
+    for q in ('"', "'", '`', '“', '”', '‘', '’'):
+        if clean.startswith(q) and clean.endswith(q) and len(clean) > 2:
+            clean = clean[1:-1].strip()
+
+    if len(clean) < 12 or clean.lower() in ("n/a", "none", "n/a (dry run)", "dry run"):
+        return False
+
+    norm_clean = re.sub(r'\s+', ' ', clean).strip().lower()
+    stripped_clean = re.sub(r'[*_`#>\-\[\]\(\)\|:]', '', norm_clean).strip()
+
+    # Reject if evidence matches template boilerplate instructions or placeholder
+    if boilerplate:
+        for bp in boilerplate:
+            if stripped_clean == bp or (len(stripped_clean) >= 15 and stripped_clean in bp):
+                return False
+
+    # Check 1: direct case-insensitive match
+    if clean.lower() in report_content.lower():
+        return True
+
+    # Check 2: normalized whitespace match
+    norm_content = re.sub(r'\s+', ' ', report_content).strip().lower()
+    if norm_clean in norm_content:
+        return True
+
+    # Check 3: markdown formatting stripped match
+    md_strip_pattern = r'[*_`#>\-\[\]\(\)\|:]'
+    stripped_content = re.sub(md_strip_pattern, '', norm_content).strip()
+    if len(stripped_clean) >= 12 and stripped_clean in stripped_content:
+        return True
+
+    return False
+
+
 def run_llm_evaluation(
     report_content: str, rubric: Dict[str, Any], dry_run: bool = False
 ) -> Dict[str, Any]:
@@ -152,7 +249,58 @@ def run_llm_evaluation(
 
         content = response.choices[0].message.content
         result = json.loads(content)
+        if not isinstance(result, dict):
+            result = {"scores": {}}
         result["is_mock"] = False
+
+        # Evidence verification and 1-shot retry for paraphrased quotes
+        boilerplate = get_template_boilerplate()
+        raw_scores = result.get("scores")
+        unverified_dims = []
+        if isinstance(raw_scores, dict):
+            for dim_id in CANONICAL_DIMENSIONS:
+                dim_data = raw_scores.get(dim_id)
+                if isinstance(dim_data, dict):
+                    sc = parse_score(dim_data.get("score"))
+                    if sc > 1:
+                        ev = str(dim_data.get("quoted_evidence") or "").strip()
+                        if not verify_quoted_evidence(ev, report_content, boilerplate):
+                            unverified_dims.append((dim_id, ev))
+
+        if unverified_dims:
+            print(f"[*] Evidence check failed for {len(unverified_dims)} dimension(s). Retrying once with LLM for verbatim excerpts...", file=sys.stderr)
+            retry_prompt = (
+                "EVIDENCE VERIFICATION WARNING:\n"
+                "The following quoted evidence snippets were NOT found verbatim in the submitted report or matched template boilerplate:\n"
+            )
+            for dim_id, ev in unverified_dims:
+                retry_prompt += f"- {dim_id}: \"{ev}\"\n"
+            retry_prompt += (
+                "\nA paraphrased or unverified quote will cause that dimension to be capped at 1/5.\n"
+                "Please extract EXACT, VERBATIM quotes directly from the submitted report text for these dimensions so that evidence verification passes.\n"
+                "If the report text does not contain evidence for a high score, adjust the score down accordingly.\n"
+                "Return the complete updated JSON strictly adhering to the schema."
+            )
+            try:
+                retry_resp = client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_message},
+                        {"role": "assistant", "content": content},
+                        {"role": "user", "content": retry_prompt},
+                    ],
+                    response_format={"type": "json_object"},
+                    temperature=0.1,
+                )
+                retry_content = retry_resp.choices[0].message.content
+                retry_result = json.loads(retry_content)
+                if isinstance(retry_result, dict) and isinstance(retry_result.get("scores"), dict):
+                    result = retry_result
+                    result["is_mock"] = False
+            except Exception as retry_err:
+                print(f"[!] Warning: retry LLM call failed: {retry_err}", file=sys.stderr)
+
         return result
 
     except Exception as e:
@@ -197,76 +345,13 @@ def generate_mock_evaluation(report_content: str) -> Dict[str, Any]:
     }
 
 
-CANONICAL_DIMENSIONS = [
-    "technical_precision",
-    "empirical_reproducibility",
-    "blast_radius",
-    "attack_chain",
-    "remediation",
-]
-
-WORD_TO_NUM = {
-    "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5
-}
-
-
-def parse_score(val: Any) -> int:
-    """Robustly parses scores across ints, floats, strings ('4.5', '4/5', 'five')."""
-    if val is None:
-        return 0
-    if isinstance(val, (int, float)):
-        return max(0, min(5, int(float(val) + 0.5)))
-    if isinstance(val, str):
-        v = val.strip().lower()
-        if v in WORD_TO_NUM:
-            return WORD_TO_NUM[v]
-        if "/" in v:
-            v = v.split("/")[0].strip()
-        try:
-            return max(0, min(5, int(float(v) + 0.5)))
-        except (ValueError, TypeError):
-            return 0
-    return 0
-
-
-def verify_quoted_evidence(evidence: str, report_content: str) -> bool:
-    """Verifies that the quoted evidence string actually exists within the submitted report."""
-    if not evidence or not isinstance(evidence, str):
-        return False
-    clean = evidence.strip()
-    # Strip optional surrounding quotation marks
-    for q in ('"', "'", '`', '“', '”', '‘', '’'):
-        if clean.startswith(q) and clean.endswith(q) and len(clean) > 2:
-            clean = clean[1:-1].strip()
-
-    if len(clean) < 10 or clean.lower() in ("n/a", "none", "n/a (dry run)", "dry run"):
-        return False
-
-    # Check 1: direct case-insensitive match
-    if clean.lower() in report_content.lower():
-        return True
-
-    # Check 2: normalized whitespace match
-    norm_clean = re.sub(r'\s+', ' ', clean).strip().lower()
-    norm_content = re.sub(r'\s+', ' ', report_content).strip().lower()
-    if norm_clean in norm_content:
-        return True
-
-    # Check 3: markdown formatting stripped match
-    md_strip_pattern = r'[*_`#>\-\[\]\(\)]'
-    stripped_clean = re.sub(md_strip_pattern, '', norm_clean).strip()
-    stripped_content = re.sub(md_strip_pattern, '', norm_content).strip()
-    if len(stripped_clean) >= 10 and stripped_clean in stripped_content:
-        return True
-
-    return False
-
-
 def apply_deterministic_guardrails(
     result: Dict[str, Any], preflight: Dict[str, Any], report_content: str = ""
 ) -> Dict[str, Any]:
     """Applies hard deterministic score bounds, evidence checks, and static caps."""
-    raw_scores = result.get("scores", {})
+    raw_scores = result.get("scores")
+    if not isinstance(raw_scores, dict):
+        raw_scores = {}
     guardrail_notes = []
     cleaned_scores = {}
     is_mock = result.get("is_mock", False)
@@ -298,16 +383,17 @@ def apply_deterministic_guardrails(
 
     # 2. Enforce quoted evidence existence within submitted report
     if not is_mock and report_content:
+        boilerplate = get_template_boilerplate()
         for dim_id in CANONICAL_DIMENSIONS:
             data = scores[dim_id]
             curr_score = data.get("score", 0)
             if curr_score > 1:
                 ev = str(data.get("quoted_evidence") or "").strip()
-                if not verify_quoted_evidence(ev, report_content):
+                if not verify_quoted_evidence(ev, report_content, boilerplate):
                     data["score"] = 1
                     note = (
-                        f"[Deterministic Guardrail] Quoted evidence for '{dim_id}' was missing or "
-                        f"not found in the submitted report. Score capped from {curr_score}/5 to 1/5."
+                        f"[Deterministic Guardrail] Quoted evidence for '{dim_id}' was missing, "
+                        f"boilerplate, or not found in the submitted report. Score capped from {curr_score}/5 to 1/5."
                     )
                     data["feedback"] = f"{data.get('feedback', '')} {note}".strip()
                     guardrail_notes.append(note)
@@ -332,7 +418,7 @@ def apply_deterministic_guardrails(
 
     # 5. Guardrail: Flag adversarial attempts against grader
     if preflight.get("adversarial_marker", False):
-        note = "[Security Notice] Submitted text contained prompt injection strings targeting the grader bot. All instruction attempts were neutralized."
+        note = "[Security Notice] Submitted text contained prompt injection strings targeting the grader bot. The submission was flagged."
         guardrail_notes.append(note)
 
     # 6. Deterministically calculate total score strictly across canonical dimensions
@@ -366,7 +452,9 @@ def format_markdown_comment(
     total = result.get("total_score", 0)
     grade = result.get("grade", "N/A")
     verdict = result.get("verdict", "Evaluated")
-    scores = result.get("scores", {})
+    scores = result.get("scores")
+    if not isinstance(scores, dict):
+        scores = {}
     is_mock = result.get("is_mock", False)
 
     dim_names = {
