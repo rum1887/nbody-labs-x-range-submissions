@@ -1,0 +1,73 @@
+{
+  "rubric_name": "NBody Labs X Range Bug Bounty Evaluation Rubric",
+  "version": "1.0",
+  "max_score": 25,
+  "dimensions": [
+    {
+      "id": "technical_precision",
+      "name": "Technical Precision & Context Analysis",
+      "max_points": 5,
+      "criteria": {
+        "5": "Accurately identifies architecture (orchestrator, tool loop, context windows, external sources). Precisely identifies trust boundary crossings (untrusted retrieved data entering privileged prompt context). Distinguishes direct from indirect prompt injection without vague handwaving.",
+        "4": "Correctly identifies vulnerability type and primary trust boundary. Minor gaps in architectural terminology, but mechanism is clearly described.",
+        "3": "Names vulnerability type correctly, but threat model is generic. Treats LLM as black box without detailing tool or context interactions.",
+        "2": "Confuses core security concepts (e.g. calls prompt injection SQLi/XSS). Superficial description of the system.",
+        "0-1": "Complete lack of technical grounding. Claims 'I tricked the bot by asking nicely' with no security analysis."
+      }
+    },
+    {
+      "id": "empirical_reproducibility",
+      "name": "Empirical Reproducibility & Methodology",
+      "max_points": 5,
+      "criteria": {
+        "5": "Documents exact target specs (model name, quantization, temperature, seed/parameters). Conducts empirical sampling across N trials (e.g. N=10 with X% success rate) and characterizes failure modes. Provides exact step-by-step reproduction steps, raw input payloads, and unedited model output logs.",
+        "4": "Provides complete reproducible steps, exact payload, and model configuration. Mentions repeatability across a few trials, but lacks structured statistical data.",
+        "3": "Steps are reproducible on author's machine, but omits key parameters (temperature, model quantization, exact prompt wrapper). Only tested once.",
+        "2": "Instructions are vague or require guesswork. Incomplete payload requiring substantial triager modification.",
+        "0-1": "Irreproducible. Missing payloads, incomplete logs, or claims that cannot be replicated."
+      }
+    },
+    {
+      "id": "blast_radius",
+      "name": "Blast Radius & Realistic Impact",
+      "max_points": 5,
+      "criteria": {
+        "5": "Demonstrates concrete, realistic impact within target environment (unauthorized tool invocation with malicious arguments, private data exfiltration, state tampering, privilege escalation). Clearly differentiates demonstrated impact from theoretical risks. Accurately maps to CVSS / bug bounty severity tiers (P1-P4).",
+        "4": "Demonstrates tangible impact (forced tool execution) with sound reasoning on downstream risk, though some collateral consequences remain untested.",
+        "3": "Impact demonstrated, but stops at benign/low-severity proof of concept (model repeats slogan, outputs profanity, or acknowledges jailbreak without executing sensitive actions).",
+        "2": "Heavily inflated claims without technical evidence (e.g. claiming full AWS root RCE when model merely generated markdown text).",
+        "0-1": "No demonstrated impact. Purely benign behavior or user-intended functionality mistaken for a bug."
+      }
+    },
+    {
+      "id": "attack_chain",
+      "name": "Attack Chain & Payload Engineering",
+      "max_points": 5,
+      "criteria": {
+        "5": "Dissects anatomy of exploit payload: formatting (markdown delimiters, simulated system tokens, role confusion), evasion of heuristic or safety filters, and cognitive override techniques. Explains WHY the model prioritized attacker instructions over system instructions.",
+        "4": "Well-crafted payload tailored specifically to target's tool schemas and prompt structure. Clear breakdown of payload components.",
+        "3": "Working payload, but minimal explanation of why it works or which token patterns triggered compliance. Relies partially on standard heuristic triggers.",
+        "2": "Crude, copy-pasted generic jailbreak prompt (e.g. standard DAN) not tailored to agent's actual tool calling interface.",
+        "0-1": "Ineffective or trivial payload with no engineering or analysis."
+      }
+    },
+    {
+      "id": "remediation",
+      "name": "Remediation & Defense-in-Depth",
+      "max_points": 5,
+      "criteria": {
+        "5": "Provides robust, multi-layered defense strategy: architectural controls (dual-LLM pattern, human-in-the-loop verification, strict schema gating), prompt-level defenses (instruction hierarchy, data delimiters), and runtime observability. Accurately acknowledges limitations and bypass risks of each recommended control.",
+        "4": "Suggests both architectural fixes (tool permission scoping) and prompt engineering defenses. Actionable and practical to implement.",
+        "3": "Suggests only prompt-level mitigations (e.g. 'Add never trust external input'). Lacks architectural enforcement or structural validation.",
+        "2": "Superficial or unhelpful advice ('Use a better AI model', 'Add an input filter for bad words').",
+        "0-1": "No remediation provided, or suggested fixes break intended system functionality."
+      }
+    }
+  ],
+  "grading_scale": [
+    {"grade": "A", "min_score": 23, "max_score": 25, "verdict": "Accepted (Exemplary)", "description": "Production-ready vulnerability report ready for enterprise triage."},
+    {"grade": "B", "min_score": 18, "max_score": 22, "verdict": "Valid (Minor Revisions)", "description": "Solid technical finding and proof; minor polish needed."},
+    {"grade": "C", "min_score": 12, "max_score": 17, "verdict": "Needs Work (Informational)", "description": "Interesting vector, but lacks empirical rigor, blast radius, or reproduction detail."},
+    {"grade": "D", "min_score": 0, "max_score": 11, "verdict": "Rejected", "description": "Insufficient detail, irreproducible, hallucinated severity, or purely theoretical."}
+  ]
+}

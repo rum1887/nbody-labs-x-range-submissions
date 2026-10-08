@@ -1,0 +1,63 @@
+name: Triage Bug Bounty Submission
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'submissions/**.md'
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  triage-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Base Repository (Trusted Scripts)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Bot Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r bot/requirements.txt
+
+      - name: Checkout Pull Request Submissions Content
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: pr_workspace
+          sparse-checkout: |
+            submissions
+
+      - name: Detect Changed Report and Run Triage Bot
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO_NAME: ${{ github.repository }}
+        run: |
+          # Find the markdown report submitted in the PR
+          REPORT_FILE=$(find pr_workspace/submissions -name "*.md" -not -name "README.md" | head -n 1)
+
+          if [ -z "$REPORT_FILE" ]; then
+            echo "[!] No submission markdown file found in submissions/"
+            exit 0
+          fi
+
+          echo "[*] Found report to evaluate: $REPORT_FILE"
+
+          python bot/triage_bot.py \
+            --report "$REPORT_FILE" \
+            --pr-number "$PR_NUMBER" \
+            --repo "$REPO_NAME"
