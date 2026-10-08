@@ -2,7 +2,7 @@ name: Triage Bug Bounty Submission
 
 on:
   pull_request_target:
-    types: [labeled]
+    types: [labeled, synchronize]
 
 permissions:
   contents: read
@@ -49,6 +49,7 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO_NAME: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           # 1. Fetch changed files list using the GitHub CLI / API
           echo "[*] Querying changed files for PR #${PR_NUMBER} in ${REPO_NAME}..."
@@ -59,12 +60,14 @@ jobs:
           REPORT_COUNT=$(echo "$REPORT_FILES" | grep -v '^$' | wc -l | tr -d ' ')
 
           if [ "$REPORT_COUNT" -eq 0 ]; then
-            echo "[!] Error: No valid report markdown file found in submissions/challenge-0xXX/<handle>-report.md"
+            echo "No report markdown file found matching \`submissions/challenge-0x01/<your-handle>-report.md\` (or \`submissions/challenge-01/...\`). Found changed files: $CHANGED_FILES" > failure_reason.txt
+            echo "[!] Error: No valid report markdown file found."
             exit 1
           fi
 
           if [ "$REPORT_COUNT" -gt 1 ]; then
-            echo "[!] Error: Pull request must add or modify exactly ONE report file. Found $REPORT_COUNT: $REPORT_FILES"
+            echo "Pull request must add or modify exactly ONE report file. Found $REPORT_COUNT: $REPORT_FILES" > failure_reason.txt
+            echo "[!] Error: Pull request must add or modify exactly ONE report file."
             exit 1
           fi
 
@@ -75,11 +78,13 @@ jobs:
 
           # 3. Security Check: Reject symlinks and non-regular files
           if [ -L "$FULL_REPORT_PATH" ]; then
+            echo "Report file cannot be a symbolic link: \`${TARGET_REL_PATH}\`" > failure_reason.txt
             echo "[!] Security Violation: Report file cannot be a symbolic link!"
             exit 1
           fi
 
           if [ ! -f "$FULL_REPORT_PATH" ]; then
+            echo "Report file is not a regular file: \`${TARGET_REL_PATH}\`" > failure_reason.txt
             echo "[!] Error: Report file is not a regular file!"
             exit 1
           fi
@@ -87,7 +92,8 @@ jobs:
           # 4. Security Check: File size cap (max 64 KB = 65,536 bytes)
           FILE_SIZE=$(wc -c < "$FULL_REPORT_PATH" | tr -d ' ')
           if [ "$FILE_SIZE" -gt 65536 ]; then
-            echo "[!] Security Violation: Report file exceeds maximum allowed size of 64 KB (current: ${FILE_SIZE} bytes)."
+            echo "Report file exceeds maximum allowed size of 64 KB (current size: ${FILE_SIZE} bytes)." > failure_reason.txt
+            echo "[!] Security Violation: Report file exceeds maximum allowed size of 64 KB."
             exit 1
           fi
 
@@ -95,4 +101,32 @@ jobs:
           python bot/triage_bot.py \
             --report "$FULL_REPORT_PATH" \
             --pr-number "$PR_NUMBER" \
-            --repo "$REPO_NAME"
+            --repo "$REPO_NAME" \
+            --sha "$HEAD_SHA"
+
+      - name: Post Triage Failure Explanation to PR
+        if: failure()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO_NAME: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          REASON="The automated triage evaluation failed during verification."
+          if [ -f failure_reason.txt ]; then
+            REASON=$(cat failure_reason.txt)
+          fi
+
+          COMMENT_BODY="### ❌ NBody Labs 0xRange: Triage Evaluation Failed
+
+**Commit**: \`${HEAD_SHA:0:7}\` (\`${HEAD_SHA}\`)
+
+**Failure Details**:
+> ${REASON}
+
+#### How to resolve:
+1. Ensure your vulnerability report is located at \`submissions/challenge-0x01/<your-handle>-report.md\` (or \`submissions/challenge-01/<your-handle>-report.md\`).
+2. Verify that your PR modifies **exactly one** regular markdown file under 64 KB.
+3. Follow the format in [\`templates/REPORT_TEMPLATE.md\`](templates/REPORT_TEMPLATE.md)."
+
+          gh pr comment "$PR_NUMBER" --repo "$REPO_NAME" --body "$COMMENT_BODY" || true

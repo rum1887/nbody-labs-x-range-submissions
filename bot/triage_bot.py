@@ -205,6 +205,29 @@ CANONICAL_DIMENSIONS = [
     "remediation",
 ]
 
+WORD_TO_NUM = {
+    "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5
+}
+
+
+def parse_score(val: Any) -> int:
+    """Robustly parses scores across ints, floats, strings ('4.5', '4/5', 'five')."""
+    if val is None:
+        return 0
+    if isinstance(val, (int, float)):
+        return max(0, min(5, int(float(val) + 0.5)))
+    if isinstance(val, str):
+        v = val.strip().lower()
+        if v in WORD_TO_NUM:
+            return WORD_TO_NUM[v]
+        if "/" in v:
+            v = v.split("/")[0].strip()
+        try:
+            return max(0, min(5, int(float(v) + 0.5)))
+        except (ValueError, TypeError):
+            return 0
+    return 0
+
 
 def verify_quoted_evidence(evidence: str, report_content: str) -> bool:
     """Verifies that the quoted evidence string actually exists within the submitted report."""
@@ -258,17 +281,14 @@ def apply_deterministic_guardrails(
                 "quoted_evidence": "",
             }
 
+        raw_score = dim_data.get("score", 0)
+        bounded_score = parse_score(raw_score)
         try:
-            raw_score = int(dim_data.get("score", 0))
-        except (TypeError, ValueError):
-            raw_score = 0
-
-        bounded_score = max(0, min(5, raw_score))
-        if raw_score > 5:
-            note = f"[Deterministic Guardrail] Dimension '{dim_id}' score ({raw_score}) exceeded max bound (5). Clamped to 5/5."
-            guardrail_notes.append(note)
-        elif raw_score < 0:
-            bounded_score = 0
+            if isinstance(raw_score, (int, float)) and raw_score > 5:
+                note = f"[Deterministic Guardrail] Dimension '{dim_id}' score ({raw_score}) exceeded max bound (5). Clamped to 5/5."
+                guardrail_notes.append(note)
+        except Exception:
+            pass
 
         dim_data["score"] = bounded_score
         cleaned_scores[dim_id] = dim_data
@@ -335,7 +355,14 @@ def apply_deterministic_guardrails(
     return result
 
 
-def format_markdown_comment(result: Dict[str, Any], report_filename: str) -> str:
+def _escape_table_cell(text: Any) -> str:
+    """Escapes pipe characters and newlines so markdown tables remain well-formed."""
+    return str(text).replace("|", "\\|").replace("\r\n", "<br>").replace("\n", "<br>").strip()
+
+
+def format_markdown_comment(
+    result: Dict[str, Any], report_filename: str, sha: str = ""
+) -> str:
     total = result.get("total_score", 0)
     grade = result.get("grade", "N/A")
     verdict = result.get("verdict", "Evaluated")
@@ -359,10 +386,11 @@ def format_markdown_comment(result: Dict[str, Any], report_filename: str) -> str
             "",
         ])
 
+    sha_badge = f" | **Commit**: `{sha[:7]}` (`{sha}`)" if sha else ""
     md.extend([
         f"## 🛡️ NBody Labs 0xRange Security Triage: Evaluation Report Card",
         f"",
-        f"**Target Report**: `{report_filename}`",
+        f"**Target Report**: `{report_filename}`{sha_badge}",
         f"",
         f"| **Final Score** | **Grade** | **Triage Verdict** |",
         f"| :---: | :---: | :---: |",
@@ -377,9 +405,13 @@ def format_markdown_comment(result: Dict[str, Any], report_filename: str) -> str
     for key, name in dim_names.items():
         data = scores.get(key, {})
         sc = data.get("score", 0)
-        fb = data.get("feedback", "No feedback provided.")
+        fb = _escape_table_cell(data.get("feedback", "No feedback provided."))
         ev = data.get("quoted_evidence")
-        ev_str = f"<br><sub>*Evidence*: `{ev}`</sub>" if ev and ev != "N/A (Dry run)" else ""
+        if ev and ev != "N/A (Dry run)":
+            ev_esc = _escape_table_cell(ev)
+            ev_str = f"<br><sub>*Evidence*: `{ev_esc}`</sub>"
+        else:
+            ev_str = ""
         md.append(f"| **{name}** | `{sc} / 5` | {fb}{ev_str} |")
 
     guardrails = result.get("guardrail_notes", [])
@@ -454,6 +486,7 @@ def main():
     parser.add_argument("--output", help="Path to save markdown output")
     parser.add_argument("--pr-number", type=int, help="GitHub PR number to comment on")
     parser.add_argument("--repo", default=os.getenv("GITHUB_REPOSITORY"), help="GitHub owner/repo")
+    parser.add_argument("--sha", default=os.getenv("COMMIT_SHA", ""), help="Commit SHA being graded")
     parser.add_argument("--json", action="store_true", help="Output raw JSON instead of markdown")
     parser.add_argument("--dry-run", action="store_true", help="Allow mock evaluation for offline testing")
 
@@ -494,7 +527,7 @@ def main():
     if args.json:
         output_str = json.dumps(result, indent=2)
     else:
-        output_str = format_markdown_comment(result, report_path.name)
+        output_str = format_markdown_comment(result, report_path.name, sha=args.sha)
 
     if args.output:
         with open(args.output, "w", encoding="utf-8") as f:
