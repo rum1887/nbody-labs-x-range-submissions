@@ -197,38 +197,126 @@ def generate_mock_evaluation(report_content: str) -> Dict[str, Any]:
     }
 
 
-def apply_deterministic_guardrails(
-    result: Dict[str, Any], preflight: Dict[str, Any]
-) -> Dict[str, Any]:
-    """Applies hard deterministic score caps based on static code checks."""
-    scores = result.get("scores", {})
-    guardrail_notes = []
+CANONICAL_DIMENSIONS = [
+    "technical_precision",
+    "empirical_reproducibility",
+    "blast_radius",
+    "attack_chain",
+    "remediation",
+]
 
-    # Guardrail 1: Enforce empirical sampling
-    if not preflight["has_trials"]:
-        current = scores.get("empirical_reproducibility", {}).get("score", 0)
+
+def verify_quoted_evidence(evidence: str, report_content: str) -> bool:
+    """Verifies that the quoted evidence string actually exists within the submitted report."""
+    if not evidence or not isinstance(evidence, str):
+        return False
+    clean = evidence.strip()
+    # Strip optional surrounding quotation marks
+    for q in ('"', "'", '`', '“', '”', '‘', '’'):
+        if clean.startswith(q) and clean.endswith(q) and len(clean) > 2:
+            clean = clean[1:-1].strip()
+
+    if len(clean) < 10 or clean.lower() in ("n/a", "none", "n/a (dry run)", "dry run"):
+        return False
+
+    # Check 1: direct case-insensitive match
+    if clean.lower() in report_content.lower():
+        return True
+
+    # Check 2: normalized whitespace match
+    norm_clean = re.sub(r'\s+', ' ', clean).strip().lower()
+    norm_content = re.sub(r'\s+', ' ', report_content).strip().lower()
+    if norm_clean in norm_content:
+        return True
+
+    # Check 3: markdown formatting stripped match
+    md_strip_pattern = r'[*_`#>\-\[\]\(\)]'
+    stripped_clean = re.sub(md_strip_pattern, '', norm_clean).strip()
+    stripped_content = re.sub(md_strip_pattern, '', norm_content).strip()
+    if len(stripped_clean) >= 10 and stripped_clean in stripped_content:
+        return True
+
+    return False
+
+
+def apply_deterministic_guardrails(
+    result: Dict[str, Any], preflight: Dict[str, Any], report_content: str = ""
+) -> Dict[str, Any]:
+    """Applies hard deterministic score bounds, evidence checks, and static caps."""
+    raw_scores = result.get("scores", {})
+    guardrail_notes = []
+    cleaned_scores = {}
+    is_mock = result.get("is_mock", False)
+
+    # 1. Enforce strict per-dimension bounds (0 <= score <= 5) and canonical dimensions
+    for dim_id in CANONICAL_DIMENSIONS:
+        dim_data = raw_scores.get(dim_id)
+        if not isinstance(dim_data, dict):
+            dim_data = {
+                "score": 0,
+                "feedback": f"Dimension '{dim_id}' missing or malformed.",
+                "quoted_evidence": "",
+            }
+
+        try:
+            raw_score = int(dim_data.get("score", 0))
+        except (TypeError, ValueError):
+            raw_score = 0
+
+        bounded_score = max(0, min(5, raw_score))
+        if raw_score > 5:
+            note = f"[Deterministic Guardrail] Dimension '{dim_id}' score ({raw_score}) exceeded max bound (5). Clamped to 5/5."
+            guardrail_notes.append(note)
+        elif raw_score < 0:
+            bounded_score = 0
+
+        dim_data["score"] = bounded_score
+        cleaned_scores[dim_id] = dim_data
+
+    result["scores"] = cleaned_scores
+    scores = cleaned_scores
+
+    # 2. Enforce quoted evidence existence within submitted report
+    if not is_mock and report_content:
+        for dim_id in CANONICAL_DIMENSIONS:
+            data = scores[dim_id]
+            curr_score = data.get("score", 0)
+            if curr_score > 1:
+                ev = str(data.get("quoted_evidence") or "").strip()
+                if not verify_quoted_evidence(ev, report_content):
+                    data["score"] = 1
+                    note = (
+                        f"[Deterministic Guardrail] Quoted evidence for '{dim_id}' was missing or "
+                        f"not found in the submitted report. Score capped from {curr_score}/5 to 1/5."
+                    )
+                    data["feedback"] = f"{data.get('feedback', '')} {note}".strip()
+                    guardrail_notes.append(note)
+
+    # 3. Guardrail: Enforce empirical sampling
+    if not preflight.get("has_trials", False):
+        current = scores["empirical_reproducibility"].get("score", 0)
         if current > 2:
             scores["empirical_reproducibility"]["score"] = 2
             note = "[Deterministic Guardrail] Missing structured empirical trial data (e.g. N=10 trials, X% success rate). Score capped at 2/5."
             scores["empirical_reproducibility"]["feedback"] = f"{scores['empirical_reproducibility'].get('feedback', '')} {note}".strip()
             guardrail_notes.append(note)
 
-    # Guardrail 2: Enforce forensic stages (REACHED / HIJACKED / LEAKED) & approval gate
-    if not preflight["has_forensics"]:
-        current = scores.get("technical_precision", {}).get("score", 0)
+    # 4. Guardrail: Enforce forensic stages & approval gate
+    if not preflight.get("has_forensics", False):
+        current = scores["technical_precision"].get("score", 0)
         if current > 3:
             scores["technical_precision"]["score"] = 3
-            note = "[Deterministic Guardrail] Report does not apply the forensic taxonomy (REACHED vs. HIJACKED vs. LEAKED) or analyze the Approval Gate. Score capped at 3/5."
+            note = "[Deterministic Guardrail] Report does not apply forensic taxonomy (REACHED vs. HIJACKED vs. LEAKED) or analyze Approval Gate. Score capped at 3/5."
             scores["technical_precision"]["feedback"] = f"{scores['technical_precision'].get('feedback', '')} {note}".strip()
             guardrail_notes.append(note)
 
-    # Guardrail 3: Flag adversarial attempts against grader
-    if preflight["adversarial_marker"]:
+    # 5. Guardrail: Flag adversarial attempts against grader
+    if preflight.get("adversarial_marker", False):
         note = "[Security Notice] Submitted text contained prompt injection strings targeting the grader bot. All instruction attempts were neutralized."
         guardrail_notes.append(note)
 
-    # Deterministically calculate total score and grade
-    total = sum(int(scores.get(k, {}).get("score", 0)) for k in scores)
+    # 6. Deterministically calculate total score strictly across canonical dimensions
+    total = sum(int(scores[k].get("score", 0)) for k in CANONICAL_DIMENSIONS)
     total = max(0, min(25, total))
 
     if total >= 23:
@@ -401,7 +489,7 @@ def main():
     result = run_llm_evaluation(report_content, rubric, dry_run=args.dry_run)
 
     # 3. Apply deterministic score caps
-    result = apply_deterministic_guardrails(result, preflight)
+    result = apply_deterministic_guardrails(result, preflight, report_content)
 
     if args.json:
         output_str = json.dumps(result, indent=2)
