@@ -2,9 +2,7 @@ name: Triage Bug Bounty Submission
 
 on:
   pull_request_target:
-    types: [opened, synchronize, reopened]
-    paths:
-      - 'submissions/**.md'
+    types: [labeled]
 
 permissions:
   contents: read
@@ -13,12 +11,16 @@ permissions:
 
 jobs:
   triage-report:
+    # Require a repository maintainer to apply the 'ready-to-grade' label
+    # This prevents strangers from spending your API quota by opening spam PRs
+    if: contains(github.event.pull_request.labels.*.name, 'ready-to-grade')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Base Repository (Trusted Scripts)
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.base.ref }}
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -36,10 +38,11 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           path: pr_workspace
+          persist-credentials: false
           sparse-checkout: |
             submissions
 
-      - name: Detect Changed Report and Run Triage Bot
+      - name: Identify, Validate, and Grade Changed Report File
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -47,17 +50,49 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO_NAME: ${{ github.repository }}
         run: |
-          # Find the markdown report submitted in the PR
-          REPORT_FILE=$(find pr_workspace/submissions -name "*.md" -not -name "README.md" | head -n 1)
+          # 1. Fetch changed files list using the GitHub CLI / API
+          echo "[*] Querying changed files for PR #${PR_NUMBER} in ${REPO_NAME}..."
+          CHANGED_FILES=$(gh pr view "$PR_NUMBER" --repo "$REPO_NAME" --json files --jq '.files[].path')
 
-          if [ -z "$REPORT_FILE" ]; then
-            echo "[!] No submission markdown file found in submissions/"
-            exit 0
+          # 2. Filter for report markdown files in submissions/challenge-*/
+          REPORT_FILES=$(echo "$CHANGED_FILES" | grep -E '^submissions/challenge-[0-9]{2}/[^\/]+\.md$' || true)
+          REPORT_COUNT=$(echo "$REPORT_FILES" | grep -v '^$' | wc -l | tr -d ' ')
+
+          if [ "$REPORT_COUNT" -eq 0 ]; then
+            echo "[!] Error: No valid report markdown file found in submissions/challenge-XX/<handle>-report.md"
+            exit 1
           fi
 
-          echo "[*] Found report to evaluate: $REPORT_FILE"
+          if [ "$REPORT_COUNT" -gt 1 ]; then
+            echo "[!] Error: Pull request must add or modify exactly ONE report file. Found $REPORT_COUNT: $REPORT_FILES"
+            exit 1
+          fi
 
+          TARGET_REL_PATH="$REPORT_FILES"
+          FULL_REPORT_PATH="pr_workspace/${TARGET_REL_PATH}"
+
+          echo "[*] Target report file identified: $FULL_REPORT_PATH"
+
+          # 3. Security Check: Reject symlinks and non-regular files
+          if [ -L "$FULL_REPORT_PATH" ]; then
+            echo "[!] Security Violation: Report file cannot be a symbolic link!"
+            exit 1
+          fi
+
+          if [ ! -f "$FULL_REPORT_PATH" ]; then
+            echo "[!] Error: Report file is not a regular file!"
+            exit 1
+          fi
+
+          # 4. Security Check: File size cap (max 64 KB = 65,536 bytes)
+          FILE_SIZE=$(wc -c < "$FULL_REPORT_PATH" | tr -d ' ')
+          if [ "$FILE_SIZE" -gt 65536 ]; then
+            echo "[!] Security Violation: Report file exceeds maximum allowed size of 64 KB (current: ${FILE_SIZE} bytes)."
+            exit 1
+          fi
+
+          # 5. Run the Triage Bot (fails closed on missing API key or upstream error)
           python bot/triage_bot.py \
-            --report "$REPORT_FILE" \
+            --report "$FULL_REPORT_PATH" \
             --pr-number "$PR_NUMBER" \
             --repo "$REPO_NAME"

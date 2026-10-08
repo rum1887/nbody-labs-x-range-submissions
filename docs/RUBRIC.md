@@ -1,10 +1,10 @@
-# Bug Bounty Evaluation Rubric (25-Point Standard)
+# NBody Labs Bug Bounty Evaluation Rubric (25-Point Standard)
 
-This rubric is used by triagers and the automated GitHub Reviewer Bot to evaluate LLM security and vulnerability reports submitted to NBody Labs X Range.
+This rubric is used by triagers and the automated GitHub Reviewer Bot to evaluate security and vulnerability reports submitted to NBody Labs X Range.
 
-LLM security triage differs fundamentally from traditional web application security:
-* **LLMs are probabilistic**: Findings cannot be judged on "100% determinism". Instead, top-tier reports document empirical success rates across multiple trials under specified parameters.
-* **Impact must be grounded in agency**: Getting a model to say something prohibited is usually low severity. Forcing a model to invoke unauthorized tools, exfiltrate data, or compromise state is critical severity.
+Security triage for autonomous agent systems differs fundamentally from traditional web application security:
+* **LLMs are probabilistic**: Findings cannot be judged on "100% determinism". Top-tier reports document empirical success rates across multiple trials under specified parameters.
+* **Impact must be grounded in agency and forensic stages**: Getting a model to say something prohibited is usually low severity. Forcing a model to invoke unauthorized tools, exfiltrate private data, or manipulate the **Human-in-the-Loop Approval Gate** is critical severity.
 
 ---
 
@@ -16,9 +16,11 @@ LLM security triage differs fundamentally from traditional web application secur
 ├──────────────────────────────────┬─────────────────────────────────────┤
 │ Dimension                        │ Score Range                         │
 ├──────────────────────────────────┼─────────────────────────────────────┤
-│ 1. Technical Precision & Context │ 0 – 5 points                        │
+│ 1. Technical Precision & Forensic│ 0 – 5 points                        │
+│    Modeling (REACHED/HIJACKED)   │                                     │
 │ 2. Empirical Reproducibility     │ 0 – 5 points                        │
-│ 3. Blast Radius & Impact         │ 0 – 5 points                        │
+│ 3. Blast Radius & Approval-Gate  │ 0 – 5 points                        │
+│    Analysis (LEAKED vs. HELD)    │                                     │
 │ 4. Attack Chain Engineering      │ 0 – 5 points                        │
 │ 5. Remediation & Defenses        │ 0 – 5 points                        │
 └──────────────────────────────────┴─────────────────────────────────────┘
@@ -26,15 +28,18 @@ LLM security triage differs fundamentally from traditional web application secur
 
 ---
 
-### 1. Technical Precision & Context Analysis (0–5 Points)
+### 1. Technical Precision & Forensic Modeling (0–5 Points)
 
-Evaluates whether the report correctly models the target architecture, trust boundaries, and root cause.
+Evaluates whether the report correctly models the target architecture, trust boundaries, and the **Forensic Triage Taxonomy**:
+* **REACHED**: Untrusted external data successfully ingested into model context.
+* **HIJACKED**: Agent objective diverted to unauthorized tool calling or private data reading.
+* **LEAKED / MUTATED**: State mutation executed vs. held at the gate.
 
 | Points | Description |
 | :--- | :--- |
-| **5 (Exemplary)** | Accurately identifies the architecture (orchestrator, tool loop, context windows, external sources). Precisely identifies trust boundary crossings (e.g., untrusted retrieved content entering privileged system prompt context). Distinguishes direct prompt injection from indirect prompt injection and explains the specific architectural vulnerability without generic handwaving. |
-| **4 (Strong)** | Correctly identifies the vulnerability type and primary trust boundary. Minor gaps in architectural terminology, but the technical mechanism is clearly described. |
-| **3 (Adequate)** | Names the vulnerability type correctly (e.g., indirect prompt injection), but threat model is generic. Treats the LLM as a black box without identifying how tools or retrieved content interact with the context. |
+| **5 (Exemplary)** | Accurately models the architecture (orchestrator, tool execution loop, context windows, external sources). Rigorously applies the forensic triage taxonomy by distinguishing **REACHED** (untrusted context ingestion) vs. **HIJACKED** (intent redirect & unauthorized tool invocation). Distinguishes direct prompt injection from indirect prompt injection without vague handwaving. |
+| **4 (Strong)** | Correctly identifies the vulnerability type and primary trust boundary. Distinguishes prompt injection from tool execution and separates context ingestion from secondary tool actions with minor taxonomy gaps. |
+| **3 (Adequate)** | Names the vulnerability type correctly (e.g., indirect prompt injection), but threat model is generic. Lumps context ingestion and tool execution together without distinguishing REACHED vs. HIJACKED. |
 | **2 (Weak)** | Confuses core security concepts (e.g., calls prompt injection "SQL injection" or "XSS"). Superficial description of the system. |
 | **0–1 (Poor)** | Complete lack of technical grounding. Claims "I hacked the AI by asking nicely" with no security analysis. |
 
@@ -54,15 +59,15 @@ Evaluates whether an independent engineer or triager can reliably reproduce the 
 
 ---
 
-### 3. Blast Radius & Realistic Impact (0–5 Points)
+### 3. Blast Radius & Approval-Gate Analysis (0–5 Points)
 
-Evaluates the demonstration of concrete security consequences versus speculative panic.
+Evaluates the demonstration of concrete security consequences versus speculative panic, with specific analysis of the **Human-in-the-Loop Approval Gate**.
 
 | Points | Description |
 | :--- | :--- |
-| **5 (Exemplary)** | Demonstrates concrete, realistic impact within the target environment (e.g., unauthorized tool invocation with malicious arguments, private data exfiltration, state tampering, privilege escalation). Clearly differentiates demonstrated impact from potential theoretical risks. Appropriately maps to CVSS or standard bug bounty severity tiers (P1–P4). |
-| **4 (Strong)** | Demonstrates tangible impact (e.g. forced tool execution), with sound reasoning on downstream risk, though some collateral consequences remain untested. |
-| **3 (Adequate)** | Impact is demonstrated, but stops at a benign or low-severity proof of concept (e.g., model repeats an attacker slogan, outputs profanity, or acknowledges jailbreak without executing sensitive actions). |
+| **5 (Exemplary)** | Demonstrates concrete, realistic impact within the target environment (e.g., unauthorized tool invocation with malicious arguments, private data exfiltration, state tampering, privilege escalation). **Explicitly analyzes the Human-in-the-Loop Approval Gate**: determines whether mutations actually executed (**LEAKED / MUTATED**) or were intercepted as proposals (**HELD**), or demonstrates a social engineering bypass of the gate. Differentiates demonstrated impact from theoretical risks and accurately maps to CVSS / bug bounty severity tiers (P1–P4). |
+| **4 (Strong)** | Demonstrates tangible impact (e.g. forced tool execution or private secret access). Evaluates the approval gate or proposal staging, though some downstream risks remain untested. |
+| **3 (Adequate)** | Impact is demonstrated, but stops at a benign proof of concept (repeats slogan, prints profanity), or conflates staging a proposal with executing an unauthorized state change without verifying the approval gate. |
 | **2 (Weak)** | Heavily inflated impact claims without technical evidence (e.g., claiming "full remote code execution on AWS" when the model merely generated a shell command in markdown text). |
 | **0–1 (Poor)** | No demonstrated impact. Purely benign behavior or user-intended application functionality mistaken for a bug. |
 
@@ -100,7 +105,7 @@ Evaluates actionable recommendations to remediate the vulnerability at multiple 
 
 | Total Score | Grade | Status | Description |
 | :--- | :---: | :--- | :--- |
-| **23 – 25** | **A** | **Accepted (Exemplary)** | Production-ready vulnerability report. Ready for immediate submission to tier-1 bug bounty programs or enterprise security teams. |
+| **23 – 25** | **A** | **Accepted (Exemplary)** | Production-ready vulnerability report ready for enterprise security teams. |
 | **18 – 22** | **B** | **Valid (Minor Revisions)** | Solid finding and technical proof. Needs minor polish in empirical sampling or threat modeling before final sign-off. |
 | **12 – 17** | **C** | **Needs Work (Informational)** | Interesting angle or potential vector, but lacks empirical rigor, demonstrates minimal impact, or relies on vague reproduction steps. |
 | **0 – 11** | **D** | **Rejected** | Insufficient detail, irreproducible, hallucinated severity, or purely theoretical without proof of concept. |

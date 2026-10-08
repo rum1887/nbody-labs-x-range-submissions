@@ -5,7 +5,7 @@
 
 Welcome to the automated triage and peer-review portal for the **NBody Labs Security Range**.
 
-Here, security learners and researchers submit their Bug Bounty Reports as Pull Requests. Our automated **AI Triage Bot** reviews each submission against our **25-point industry triage rubric**, scores your report, and posts detailed feedback directly on your PR.
+Here, security learners and researchers submit their Bug Bounty Reports as Pull Requests. Our automated **AI Triage Bot** reviews each submission against the **25-point NBody Labs triage rubric**, scores your report, and posts detailed feedback directly on your PR.
 
 ---
 
@@ -26,10 +26,14 @@ Here, security learners and researchers submit their Bug Bounty Reports as Pull 
    ```
 2. Fill out the report thoroughly with your findings from the target lab ([`nbodylabs-0xrange`](https://github.com/rum1887/nbodylabs-0xrange)).
 3. Make sure you document:
-   * Exact prompt inputs and model configurations
-   * Empirical reliability over multiple trials (e.g. success rate over N attempts)
-   * The distinction between **REACHED** (context ingestion), **HIJACKED** (tool call attempt), and **LEAKED** (account mutation)
+   * Exact prompt inputs, target models, and sampling parameters
+   * Empirical reliability over multiple trials ($N$ attempts with success rate)
+   * The forensic distinction between **REACHED** (context ingestion), **HIJACKED** (intent redirect/tool invocation), and **LEAKED / MUTATED** vs. **HELD** at the Human-in-the-Loop **Approval Gate**
    * Forensic logs or audit artifacts
+
+> **Submission Constraints:**
+> * Each PR must add or modify **exactly one** report file (`submissions/challenge-XX/<your-handle>-report.md`).
+> * Maximum report file size is 64 KB. Symlinks are rejected.
 
 ### Step 3: Open a Pull Request
 1. Commit and push your report to your fork:
@@ -42,10 +46,12 @@ Here, security learners and researchers submit their Bug Bounty Reports as Pull 
 2. Open a Pull Request against `main` of this repository.
 
 ### Step 4: Automated Review & Triage
-Within 30–60 seconds, our **AI Triage Bot** will:
-* Evaluate your report across the 5 rubric dimensions.
-* Assign a total score (out of 25) and triage band (Grade A to Grade D).
-* Leave a comprehensive review comment on your PR with actionable guidance on what was strong and what gaps need addressing.
+Once opened:
+1. A repository maintainer will review the PR and apply the `ready-to-grade` label.
+2. The **AI Triage Bot** runs automatically to:
+   * Evaluate your report across the 5 rubric dimensions.
+   * Assign a total score (out of 25) and triage band (Grade A to Grade D).
+   * Leave a comprehensive review comment on your PR with actionable guidance on what was strong and what gaps need addressing.
 
 ---
 

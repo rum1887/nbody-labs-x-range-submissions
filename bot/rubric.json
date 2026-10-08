@@ -1,16 +1,16 @@
 {
   "rubric_name": "NBody Labs X Range Bug Bounty Evaluation Rubric",
-  "version": "1.0",
+  "version": "1.1",
   "max_score": 25,
   "dimensions": [
     {
       "id": "technical_precision",
-      "name": "Technical Precision & Context Analysis",
+      "name": "Technical Precision & Forensic Modeling",
       "max_points": 5,
       "criteria": {
-        "5": "Accurately identifies architecture (orchestrator, tool loop, context windows, external sources). Precisely identifies trust boundary crossings (untrusted retrieved data entering privileged prompt context). Distinguishes direct from indirect prompt injection without vague handwaving.",
-        "4": "Correctly identifies vulnerability type and primary trust boundary. Minor gaps in architectural terminology, but mechanism is clearly described.",
-        "3": "Names vulnerability type correctly, but threat model is generic. Treats LLM as black box without detailing tool or context interactions.",
+        "5": "Accurately identifies architecture (orchestrator, tool loop, context boundaries). Rigorously applies the forensic triage taxonomy by distinguishing REACHED (untrusted context ingestion) vs. HIJACKED (intent redirect & unauthorized tool invocation). Distinguishes direct from indirect injection without handwaving.",
+        "4": "Identifies architecture and distinguishes prompt injection from tool execution. Clearly separates context ingestion from secondary tool actions with minor taxonomy gaps.",
+        "3": "Names vulnerability type correctly, but threat model is generic. Lumps context ingestion and tool execution together without distinguishing REACHED vs. HIJACKED.",
         "2": "Confuses core security concepts (e.g. calls prompt injection SQLi/XSS). Superficial description of the system.",
         "0-1": "Complete lack of technical grounding. Claims 'I tricked the bot by asking nicely' with no security analysis."
       }
@@ -29,12 +29,12 @@
     },
     {
       "id": "blast_radius",
-      "name": "Blast Radius & Realistic Impact",
+      "name": "Blast Radius & Approval-Gate Analysis",
       "max_points": 5,
       "criteria": {
-        "5": "Demonstrates concrete, realistic impact within target environment (unauthorized tool invocation with malicious arguments, private data exfiltration, state tampering, privilege escalation). Clearly differentiates demonstrated impact from theoretical risks. Accurately maps to CVSS / bug bounty severity tiers (P1-P4).",
-        "4": "Demonstrates tangible impact (forced tool execution) with sound reasoning on downstream risk, though some collateral consequences remain untested.",
-        "3": "Impact demonstrated, but stops at benign/low-severity proof of concept (model repeats slogan, outputs profanity, or acknowledges jailbreak without executing sensitive actions).",
+        "5": "Demonstrates concrete, realistic impact grounded in agent agency. Explicitly analyzes the Human-in-the-Loop Approval Gate: evaluates whether mutations actually executed (LEAKED/MUTATED) or were intercepted as proposals, or if the gate was bypassed via social engineering. Avoids hypothetical inflation and maps to CVSS / bug bounty severity tiers (P1-P4).",
+        "4": "Demonstrates tangible impact (forced tool execution or private secret access). Evaluates the approval gate or proposal staging, though some downstream risks remain untested.",
+        "3": "Impact demonstrated, but stops at benign proof of concept, or conflates staging a proposal with executing an unauthorized state change without verifying the approval gate.",
         "2": "Heavily inflated claims without technical evidence (e.g. claiming full AWS root RCE when model merely generated markdown text).",
         "0-1": "No demonstrated impact. Purely benign behavior or user-intended functionality mistaken for a bug."
       }
