@@ -1,6 +1,7 @@
 # 🛰️ NBody Labs X Range Submissions
 
-> *Serving the curiosity of people who build, break, and defend modern systems.*
+> **The proving ground for modern security research.**  
+> *Real architectures. Modern attack surfaces. Zero artificial flags.*
 
 Welcome to the automated triage and peer-review portal for the **NBody Labs Security Range**.
 
