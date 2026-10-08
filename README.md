@@ -52,3 +52,9 @@ Within 30–60 seconds, our **AI Triage Bot** will:
 ## 📊 Evaluation Standards
 * Review the [25-Point Triage Rubric](docs/RUBRIC.md) to understand how points are awarded.
 * Review [Worked Examples & Gap Analysis](docs/EXAMPLES.md) to see the difference between an accepted report and a rejected one.
+
+---
+
+## 🛰️ About NBody Labs
+
+**NBody Labs** is an independent venture dedicated to building the next generation of hands-on security labs, realistic ranges, and practical playgrounds for engineers, researchers, and learners.
